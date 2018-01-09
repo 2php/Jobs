@@ -234,7 +234,7 @@ void TSort::makeRandomString(char* buff, int length)
 	memset(szStr, 0, length + 1);
 	srand((unsigned)time(0));//播撒随机种子
 	int iRand = 0, num = 0;
-	for (int i = 0; i <= length;)
+	for (int i = 0; i < length;)
 	{
 		int sj = rand();//伪随机，有更好的方法么？
 		iRand = sj % LEN;// iRand = 0 - 61
