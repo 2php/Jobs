@@ -231,21 +231,21 @@ void TSort::makeRandomString(char* buff, int length)
 		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z' };
 	//
 	char* szStr = new char[length + 1];
-	szStr[length] = '\0';
-	srand((unsigned)time(0));
+	memset(szStr, 0, length + 1);
+	srand((unsigned)time(0));//播撒随机种子
 	int iRand = 0, num = 0;
-	for (int i = 0; i < length;)
+	for (int i = 0; i <= length;)
 	{
-		int sj = rand();
-		if (sj % 12 == 0 && num>0) {//保证至少有数字
-			iRand = sj % LEN;// iRand = 0 - 61			
-			++i;
-		}
+		int sj = rand();//伪随机，有更好的方法么？
+		iRand = sj % LEN;// iRand = 0 - 61
 		if (iRand >= 0 && iRand < 10){
 			num++;
 		}
-		szStr[i] = g_arrCharElem[iRand];
+		if ( num>0 ) {//保证至少有数字	
+			szStr[i++] = g_arrCharElem[iRand];
+		}		
 	}
+	szStr[length] = '\0';
 	printf("the string maded: %s\n", szStr);
 	strncpy(buff, szStr, length);
 	delete[] szStr;
@@ -257,7 +257,7 @@ void TSort::QuickSortEx()
 
 	//排序结果
 	printf("single thread ordered string:\n");
-	for (int i = 0; i < 11; ++i)
+	for (int i = 0; i < 12; ++i)
 	{
 		printf("%c", m_initString[i]);
 	}
