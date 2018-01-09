@@ -79,7 +79,7 @@ void TSort::startThread()
 	{
 		return;
 	}
-	if (0 != pthread_create(&m_producer_h, NULL, consumerFunc, this))
+	if (0 != pthread_create(&m_consumer_h, NULL, consumerFunc, this))
 	{
 		this->stopThread();
 		return;
@@ -139,7 +139,7 @@ void* TSort::producerFunc(void *arg)  //生产者线程
 
 	while ( !pSortThread->m_stopProducer )
 	{
-		pthread_mutex_unlock(&g_queueMutex);
+		pthread_mutex_lock(&g_queueMutex);
 		//printf("in producer thread=%ld\n", pthread_self());
         if (index < 12) {
 			g_bufferQueue.enqueue(pSortThread->m_unorderString[index++]);
@@ -173,7 +173,7 @@ void* TSort::consumerFunc(void *arg)  //消费者线程
 	int index = 0;
 	while ( !pSortThread->m_stopConsumer )
 	{
-		pthread_mutex_unlock(&g_queueMutex);
+		pthread_mutex_lock(&g_queueMutex);
 		//printf("in consumer thread=%ld\n", pthread_self());
         if ( !g_bufferQueue.is_empty() ) {
 			pSortThread->m_orderedString[index++] = g_bufferQueue.dequeue();
