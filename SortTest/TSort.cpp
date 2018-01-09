@@ -26,7 +26,8 @@ int gettimeofday(struct timeval *tp, void *tzp)
 
 //---------------------------------------------//
 Queue<char, 12> g_bufferQueue;//FIFO队列
-pthread_mutex_t g_queueMutex;//临界资源
+pthread_mutex_t g_queueMutex;//互斥量
+pthread_mutex_t g_timeMutex;//互斥量
 bool g_bQueueFull = false;//是否队满
 bool g_bReadySort = false;//是否开始排序
 //---------------------------------------------//
@@ -43,6 +44,7 @@ TSort* TSort::instance()
 
 void TSort::unInstance()
 {
+	printf("----TSort::unInstance----\n");
 	if (_instance){
 		delete _instance;
 		_instance = NULL;
@@ -56,6 +58,7 @@ TSort::TSort()
 
 	pthread_cond_init(&cond, NULL);
 	pthread_mutex_init(&g_queueMutex, NULL);
+	pthread_mutex_init(&g_timeMutex, NULL);
 
 	memset(m_initString, 0, 15);
 	memset(m_orderedString, 0, 15);
@@ -71,6 +74,7 @@ TSort::~TSort()
 {
 	pthread_cond_destroy(&cond);
 	pthread_mutex_destroy(&g_queueMutex);
+	pthread_mutex_destroy(&g_timeMutex);
 }
 
 void TSort::startThread()
@@ -89,8 +93,8 @@ void TSort::startThread()
 void TSort::stopThread(){	
 	m_stopProducer = true;
 	m_stopConsumer = true;
-	pthread_join(m_producer_h, NULL);
-	pthread_join(m_consumer_h, NULL);
+	//pthread_join(m_producer_h, NULL);
+	//pthread_join(m_consumer_h, NULL);
 }
 
 //快速排序
@@ -150,11 +154,22 @@ void* TSort::producerFunc(void *arg)  //生产者线程
 		}		
 		pthread_mutex_unlock(&g_queueMutex);
 
+		//这个等待还不会玩
+
 		//Sleep 1s
 		gettimeofday(&now, NULL);
 		outtime.tv_sec = now.tv_sec;
-        outtime.tv_nsec = now.tv_usec * 1000;
-		pthread_cond_timedwait(&pSortThread->cond, &g_queueMutex, &outtime);
+		outtime.tv_nsec = now.tv_usec * 1000;
+		pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &outtime);
+		
+		//struct timespec abstime;
+		//struct timeval now;
+		//long timeout_ms = 100; // wait time 100ms
+		//gettimeofday(&now, NULL);
+		//long nsec = now.tv_usec * 1000 + (timeout_ms % 1000) * 1000000;
+		//abstime.tv_sec = now.tv_sec + nsec / 1000000000 + timeout_ms / 1000;
+		//abstime.tv_nsec = nsec % 1000000000;
+		//pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &abstime);
 	}
 
 	return NULL;
@@ -207,11 +222,22 @@ void* TSort::consumerFunc(void *arg)  //消费者线程
 			break;//退出线程
 		}
 
+		//这个等待还不会玩
+
 		//Sleep 1s
 		gettimeofday(&now, NULL);
 		outtime.tv_sec = now.tv_sec;
 		outtime.tv_nsec = now.tv_usec * 1000;
-		pthread_cond_timedwait(&pSortThread->cond, &g_queueMutex, &outtime);
+		pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &outtime);
+
+		//struct timespec abstime;
+		//struct timeval now;
+		//long timeout_ms = 100; // wait time 100ms
+		//gettimeofday(&now, NULL);
+		//long nsec = now.tv_usec * 1000 + (timeout_ms % 1000) * 1000000;
+		//abstime.tv_sec = now.tv_sec + nsec / 1000000000 + timeout_ms / 1000;
+		//abstime.tv_nsec = nsec % 1000000000;
+		//pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &abstime);
 	}
 	return NULL;
 }

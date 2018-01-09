@@ -24,6 +24,7 @@ int main(int argc, char * argv[])
 	//
 	getchar();
 	TSort::instance()->stopThread();
+	TSort::unInstance();
 
 
 
