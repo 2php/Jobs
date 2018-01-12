@@ -18,7 +18,8 @@ int main(int argc, char * argv[])
 
 	//单线程方式
 	TSort::instance()->QuickSortEx();
-
+	printf("press any key to go:\n");
+	getchar();
 	//多线程方式
 	TSort::instance()->startThread();
 	//

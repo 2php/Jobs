@@ -25,14 +25,31 @@ int gettimeofday(struct timeval *tp, void *tzp)
 #endif
 
 //---------------------------------------------//
-Queue<char, 12> g_bufferQueue;//FIFO队列
-pthread_mutex_t g_queueMutex;//互斥量
-pthread_mutex_t g_timeMutex;//互斥量
-bool g_bQueueFull = false;//是否队满
-bool g_bReadySort = false;//是否开始排序
+
+//什么样的操作可能会引起Context Switch(CS) - 上下文切换
+//首先我们一定是希望减少CS，那什么样的操作会发生CS呢？
+//首先，linux中一个进程的时间片到期，或是有更高优先级的进程抢占时，是会发生CS的，但这些都是我们应用开发者不可控的。
+//那么我们不妨更多地从应用开发者（user space）的角度来看这个问题，
+//我们的进程可以主动地向内核申请进行CS，而用户空间通常有两种手段能达到这一“目的”：
+
+//1）休眠 当前进程/线程
+//2）唤醒 其他进程/线程
+
+//pthread库中的pthread_cond_wait和pthread_cond_signal就是很好的例子
+//（虽然是针对线程，但linux内核并不区分进程和线程，线程只是共享了address space和其他资源罢了），
+//pthread_cond_wait 负责将当前线程挂起并进入休眠，直到条件成立的那一刻，
+//pthread_cond_signal 则是唤醒守候条件的线程。
+
 //---------------------------------------------//
-TSort* TSort::_instance = NULL;
+Queue<char,12> TSort::g_bufferQueue;//FIFO队列
+pthread_mutex_t TSort::g_queueMutex;//互斥量
+pthread_mutex_t TSort::g_timeMutex;//互斥量
+bool TSort::g_bQueueFull = false;//是否队满
+bool TSort::g_bReadySort = false;//是否开始排序
 //---------------------------------------------//
+TSort* TSort::_instance = NULL;//单件对象
+//---------------------------------------------//
+
 
 TSort* TSort::instance()
 {
@@ -57,8 +74,8 @@ TSort::TSort()
 	m_stopConsumer = false;
 
 	pthread_cond_init(&cond, NULL);
-	pthread_mutex_init(&g_queueMutex, NULL);
-	pthread_mutex_init(&g_timeMutex, NULL);
+	pthread_mutex_init(&TSort::g_queueMutex, NULL);
+	pthread_mutex_init(&TSort::g_timeMutex, NULL);
 
 	memset(m_initString, 0, 15);
 	memset(m_orderedString, 0, 15);
@@ -73,8 +90,8 @@ TSort::TSort()
 TSort::~TSort()
 {
 	pthread_cond_destroy(&cond);
-	pthread_mutex_destroy(&g_queueMutex);
-	pthread_mutex_destroy(&g_timeMutex);
+	pthread_mutex_destroy(&TSort::g_queueMutex);
+	pthread_mutex_destroy(&TSort::g_timeMutex);
 }
 
 void TSort::startThread()
@@ -93,8 +110,10 @@ void TSort::startThread()
 void TSort::stopThread(){	
 	m_stopProducer = true;
 	m_stopConsumer = true;
-	//pthread_join(m_producer_h, NULL);
-	//pthread_join(m_consumer_h, NULL);
+	pthread_cond_broadcast(&cond);
+	pthread_cond_signal(&cond);//唤醒等待的线程 //pthread_cond_wait/timedwait挂起线程进入休眠（Sleep）
+	pthread_join(m_producer_h, NULL);
+	pthread_join(m_consumer_h, NULL);
 }
 
 //快速排序
@@ -143,24 +162,26 @@ void* TSort::producerFunc(void *arg)  //生产者线程
 
 	while ( !pSortThread->m_stopProducer )
 	{
-		pthread_mutex_lock(&g_queueMutex);
+		pthread_mutex_lock(&TSort::g_queueMutex);
 		//printf("in producer thread=%ld\n", pthread_self());
         if (index < 12) {
-			g_bufferQueue.enqueue(pSortThread->m_unorderString[index++]);
-			g_bufferQueue.traverse();
+			TSort::g_bufferQueue.enqueue(pSortThread->m_unorderString[index++]);
+			TSort::g_bufferQueue.traverse();
 		}        
         else if ( index>=12 ) {
             pSortThread->m_stopProducer = true;//退出线程
 		}		
-		pthread_mutex_unlock(&g_queueMutex);
+		pthread_mutex_unlock(&TSort::g_queueMutex);
 
+
+		pthread_mutex_lock(&TSort::g_timeMutex);
 		//这个等待还不会玩
-
-		//Sleep 1s
+		//Sleep 1s //引起线程上下文切换
 		gettimeofday(&now, NULL);
 		outtime.tv_sec = now.tv_sec;
 		outtime.tv_nsec = now.tv_usec * 1000;
-		pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &outtime);
+		pthread_cond_timedwait(&pSortThread->cond, &TSort::g_timeMutex, &outtime);
+		pthread_mutex_unlock(&TSort::g_timeMutex);
 		
 		//struct timespec abstime;
 		//struct timeval now;
@@ -169,7 +190,7 @@ void* TSort::producerFunc(void *arg)  //生产者线程
 		//long nsec = now.tv_usec * 1000 + (timeout_ms % 1000) * 1000000;
 		//abstime.tv_sec = now.tv_sec + nsec / 1000000000 + timeout_ms / 1000;
 		//abstime.tv_nsec = nsec % 1000000000;
-		//pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &abstime);
+		//pthread_cond_timedwait(&pSortThread->cond, &TSort::g_timeMutex, &abstime);
 	}
 
 	return NULL;
@@ -188,16 +209,16 @@ void* TSort::consumerFunc(void *arg)  //消费者线程
 	int index = 0;
 	while ( !pSortThread->m_stopConsumer )
 	{
-		pthread_mutex_lock(&g_queueMutex);
+		pthread_mutex_lock(&TSort::g_queueMutex);
 		//printf("in consumer thread=%ld\n", pthread_self());
-        if ( !g_bufferQueue.is_empty() ) {
-			pSortThread->m_orderedString[index++] = g_bufferQueue.dequeue();
-			g_bufferQueue.traverse();
-            if ( index>=12 && g_bufferQueue.is_empty() ) {
+		if (!TSort::g_bufferQueue.is_empty()) {
+			pSortThread->m_orderedString[index++] = TSort::g_bufferQueue.dequeue();
+			TSort::g_bufferQueue.traverse();
+			if (index >= 12 && TSort::g_bufferQueue.is_empty()) {
                 g_bReadySort = true;//可以开始排序了
 			}
 		}				
-		pthread_mutex_unlock(&g_queueMutex);
+		pthread_mutex_unlock(&TSort::g_queueMutex);
 
         if ( g_bReadySort ){//开始排序
 			
@@ -222,13 +243,13 @@ void* TSort::consumerFunc(void *arg)  //消费者线程
 			break;//退出线程
 		}
 
+		pthread_mutex_lock(&TSort::g_timeMutex);
 		//这个等待还不会玩
-
 		//Sleep 1s
 		gettimeofday(&now, NULL);
 		outtime.tv_sec = now.tv_sec;
 		outtime.tv_nsec = now.tv_usec * 1000;
-		pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &outtime);
+		pthread_cond_timedwait(&pSortThread->cond, &TSort::g_timeMutex, &outtime);
 
 		//struct timespec abstime;
 		//struct timeval now;
@@ -237,7 +258,8 @@ void* TSort::consumerFunc(void *arg)  //消费者线程
 		//long nsec = now.tv_usec * 1000 + (timeout_ms % 1000) * 1000000;
 		//abstime.tv_sec = now.tv_sec + nsec / 1000000000 + timeout_ms / 1000;
 		//abstime.tv_nsec = nsec % 1000000000;
-		//pthread_cond_timedwait(&pSortThread->cond, &g_timeMutex, &abstime);
+		//pthread_cond_timedwait(&pSortThread->cond, &TSort::g_timeMutex, &abstime);
+		pthread_mutex_unlock(&TSort::g_timeMutex);
 	}
 	return NULL;
 }

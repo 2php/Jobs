@@ -47,6 +47,11 @@ private:
 
 private:
 	static TSort* _instance;
+	static Queue<char, 12> g_bufferQueue;//FIFO队列
+	static pthread_mutex_t g_queueMutex;//互斥量
+	static pthread_mutex_t g_timeMutex;//互斥量
+	static bool g_bQueueFull;//是否队满
+	static bool g_bReadySort;//是否开始排序
 };
 
 #endif
