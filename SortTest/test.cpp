@@ -2,6 +2,9 @@
 #include "TSort.h"
 #include <stdio.h>
 
+//
+// 关于线程/进程上下文切换CS知识参见： http://blog.csdn.net/leonpenn/article/details/73123908
+//
 
 int main(int argc, char * argv[])
 {
